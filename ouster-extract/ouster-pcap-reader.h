@@ -1,12 +1,9 @@
 #pragma once
 
-#define NOMINMAX
 #define PI (2.0*asin(1.0))
 
 #include <vector>
 #include <iostream>
-#include <vector>
-#include <sstream>
 #include <fstream>
 
 #include "pcap.h"
@@ -102,7 +99,7 @@ private:
 public:
 	bool	Open(std::string pcap_file);
 	bool	ImportAngles(std::string angle_file);
-	void	ReadChunk(uint32_t num_packets);
+	void	ReadChunk(int num_packets);
 	void	ConvertChunk();
 	void	SaveChunk(int chunk_num, std::string pcap_file);
 
@@ -111,17 +108,21 @@ public:
 	double							beam_azimuths[64];
 	std::vector<LidarDataPacket>	raw_lidar;
 	std::vector<LidarMeasurement>	converted_lidar;
-
+	uint64_t						filesize;
 };
 
 
 bool OusterPCAP::Open(std::string pcap_file) {
 
-	fp = pcap_open_offline(pcap_file.c_str(), errbuff);
+	// store filesize
+	std::ifstream temp(pcap_file, std::ios::binary);
+	temp.seekg(0, std::ios::end);
+	filesize = temp.tellg();
 
+	// open pcap for reading with winpcap
+	fp = pcap_open_offline(pcap_file.c_str(), errbuff);
 	if (fp == NULL)
 		return false;
-
 	return true;
 }
 
@@ -145,12 +146,16 @@ bool OusterPCAP::ImportAngles(std::string angle_file) {
 }
 
 
-void OusterPCAP::ReadChunk(uint32_t num_packets) {
+void OusterPCAP::ReadChunk(int num_packets) {
 
 	int returnVal;
 	struct pcap_pkthdr* udp_header;
 	const u_char* udp_data;
 	uint64_t packet_count = 0;
+
+	// resize number of packets if user wants to convert complete file
+	if (num_packets < 1)
+		num_packets = int(filesize/12650); // should be optimistic since PCAP file header is ignored
 	
 	raw_lidar.clear();
 	raw_lidar.resize(num_packets);
@@ -272,16 +277,11 @@ void OusterPCAP::SaveChunk(int chunk_num, std::string pcap_file) {
 
 	pdal::PointViewPtr view(new pdal::PointView(table));
 	for (auto i = 0; i < converted_lidar.size(); i++) {
-		//std::cout << converted_lidar[i].x_lidar << ", " << converted_lidar[i].y_lidar << ", " << converted_lidar[i].z_lidar << std::endl;
 		view->setField(pdal::Dimension::Id::GpsTime, i, converted_lidar[i].time);
 		view->setField(pdal::Dimension::Id::X, i, converted_lidar[i].x_lidar);
 		view->setField(pdal::Dimension::Id::Y, i, converted_lidar[i].y_lidar);
 		view->setField(pdal::Dimension::Id::Z, i, converted_lidar[i].z_lidar);
 		view->setField(pdal::Dimension::Id::Intensity, i, converted_lidar[i].intensity);
-		view->setField(pdal::Dimension::Id::PointSourceId, i, converted_lidar[i].measurement_id);
-		view->setField(pdal::Dimension::Id::Red, i, converted_lidar[i].frame_id);
-		view->setField(pdal::Dimension::Id::Green, i, converted_lidar[i].reflectance);
-		view->setField(pdal::Dimension::Id::Blue, i, converted_lidar[i].ambient_light);
 	}
 	bufferReader.addView(view);
 	pdal::Options writerOptions;

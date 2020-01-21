@@ -2,11 +2,10 @@
 #include "ouster-pcap-reader.h"
 
 // argument order:
-//	1. PCAP filepath
-//	2. Intrinsic angle filepath (JSON format file)
-//	3. Number of data packets in a chunk (careful, a vector is
-//     preallocated, so a large value will cause memory problems. 
-//     A value of 100,000 should keep you out of trouble.)
+//	1. PCAP filepath.
+//	2. Intrinsic angle filepath (JSON format file).
+//	3. Number of data packets to process at a time (chunk size). A value
+//	   less than 1 will attempt to load and process the entire file in one go.
 
 int main(int argc, char* argv[]) {
 	
@@ -25,15 +24,13 @@ int main(int argc, char* argv[]) {
 
 	// cycle through chunks of udp data packets
 	std::cout << "Converting Ouster PCAP file to LAS...";
-	uint32_t chunk_size = std::stoul(argv[3]);
+	int num_packets = std::stoi(argv[3]);
 	int chunk_num = 1;
-	//while (!pcap.eof_flag) {
-		
-		pcap.ReadChunk(chunk_size);
+	while (!pcap.eof_flag) {		
+		pcap.ReadChunk(num_packets);
 		pcap.ConvertChunk();
 		pcap.SaveChunk(chunk_num, argv[1]);
-
 		chunk_num++;
-	//}
+	}
 	std::cout << "done." << std::endl;
 }
